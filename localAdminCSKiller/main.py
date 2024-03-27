@@ -14,7 +14,7 @@ def loadCSV(csv1):
     df = pd.read_csv(csv1)
     return df
        
-# Crowdstrike API Code
+# Crowdstrike RTR Admin API Code
 def createRtrAdminApiSession():
     """Create a session with the Crowdstrike RTR Admin API."""
     try: 
@@ -57,7 +57,7 @@ def loadScripts(lRtrAdmin):
         print("Error loading scripts!")
         print(e)
         return False
-    
+# Crowdstrike RTR API Code
 def createRtrApiSession():
     """Create a session with the Crowdstrike RTR API."""
     try: 
