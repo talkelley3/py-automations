@@ -1,18 +1,21 @@
 from falconpy import RealTimeResponse, RealTimeResponseAdmin, Hosts
 import os
 import pandas as pd
+import re
 
-#global rtrAdmin
-#global rtr
-#global device
-#global user
-#global aid
-
+def readCsv(lCsv):
+    """Read's input csv"""
+    try:
+        df = pd.read_csv(lCsv)
+        return df
+    except Exception as e:
+        print(f"Error reading CSV!\n{e}")
+        return False
 # Crowdstrike RTR API Code
 def createRtrApiSession():
     """Create a session with the Crowdstrike RTR API."""
     try: 
-        print("Initializing API Admin Session...")
+        print("Initializing API RTR Session...")
         cid = os.environ["FALCON_CLIENT_ID"]
         csec = os.environ["FALCON_CLIENT_SECRET"]
         rtr = RealTimeResponse(client_id=cid, client_secret=csec)
@@ -49,20 +52,21 @@ def loadAid(host, lDevice):
                     "Check target hostname value."
                 )
         returned = result["body"]["resources"][0]
-        print(f"Retrieving AID for target host ({returned})")
+        print(f"AID Retrival Succesful: {returned}")
     else:
         returned = False
 
     return returned
 def initSession(lRtr, lDevice, lDeviceID):
     try:
-        print(f"Connecting to {lDeviceID}")
+        print(f"Connecting to: {lDeviceID}")
         session_init = lRtr.init_session(device_id=lDeviceID, queue_offline=False)
         if session_init["status_code"] != 201:
             # RTR session connection failure.
             print(f"Unable to open RTR session with {lDevice} [{lDeviceID}]")
         else:
             session_id = session_init["body"]["resources"][0]["session_id"]
+            print("Connection Successful!")
     except Exception as e:
         print("Error Connecting to Device!")
         print(e)
@@ -73,22 +77,19 @@ def delete_session(lRtr, lSession):
     Deletes the RTR session as specified by session ID
     """
     print("Deleting session...")
-    lRtr.delete_session(session_id=lSession)                    # Delete our current RTR session
-    print("Cleanup complete!")                                # Inform the user, we're done
-def checkAdmin(lRtr, lSession, lDeviceID):
-    """Checks to make sure the user exists as local admin on the machine using Crowdstrike RTR AC Command: RTR Admin API Key, User to Disable, Device to Access"""
-    command_string = 'runscript -CloudFile="Get-LocalAdmin"'
-    result = lRtr.RTR_ExecuteActiveResponderCommand(device_id=lDeviceID, session_id=lSession, base_command=f'runscript', command_string=command_string, persist=True)
-    print(result)
+    lRtr.delete_session(session_id=lSession)
+    print("Cleanup complete!")   
 def removeAdmin(lRtr, lUser, lDevice, lSession):
     """Removes Local Admin Account Using Crowdstrike RTR Command: Args: RTR Admin API Key, User to Disable, Device to Access"""
     try:
         print(f"Removing {lUser} from Local Admin on {lDevice}")
         command_string=f'runscript -CloudFile="Remove-LocalAdmin" -CommandLine="-user {lUser}"'
         result = lRtr.RTR_ExecuteActiveResponderCommand(base_command='runscript', command_string=command_string, persist=True, session_id=lSession)
-        print(result)
-        #write code to handle http status codes and throw error
-        print(f"User: {lUser} removed from Local Admin on {lDevice} Successfully")
+        if result["status_code"] != 201:
+            # RTR session connection failure.
+            print(f"Unable to remove {lUser} from Local Admin on {lDevice}")
+        else:
+            print(f"User: {lUser} removed from Local Admin on {lDevice} Successfully")
     except Exception as e:
         print("Error Removing Local Admin!")
         print(e)
@@ -96,38 +97,64 @@ def removeAdmin(lRtr, lUser, lDevice, lSession):
     
 def main():
     print("Welcome to the Crowdstrike Local Admin Removal Tool! \nThis tool is designed to take in a list of users and machine names and remove the user's local AD account from Local Admin.")
-    csvPath = input("Enter the path of the first CSV: ")
+    csvPath = input("Enter the path of the Targets CSV: ")
+    
     rtr = createRtrApiSession()
     host = createHostApiSession()
-    df = pd.read_csv(csvPath)
+    df = readCsv(csvPath)
+    autocycle = input("Would you like to automatically cycle through the list? (t/n): ")
+    if autocycle == "t":
+        print("Automating the list...")
+        confBool = "t"
+    else:
+        confBool = "n"
+        print("Manual Mode Engaged...")
     for index, row in df.iterrows():
-        i = 1
+        i = 0
         user = row['USERNAME']
         device = row['DEVICE']
         status = row['STATUS']
         action = row['ACTION']
-        aid = loadAid(host, device)
-        session = initSession(rtr, device, aid)
-        confBool = input("Would you like to remove? (t/n): ")
-        if confBool == "t":
-            #checkAdmin(rtr, session, aid)
-            try:
-                removeAdmin(rtr, user, device, session)
-                df['STATUS'] = 'SUCCESS'
-            except:
-                print("ERROR!")
-                df['STATUS']= 'ERROR'
+        takeAct = df['ACTION'].to_string()
+        takeAct = re.findall("REMOVE|PASS", takeAct)
+        takeAct = takeAct[0]
+        if takeAct == "REMOVE":
+            aid = loadAid(host, device)
+            session = initSession(rtr, device, aid)
+            if autocycle == "t":
+                print(f"Auto-processing Account #{i}")
+            else:
+                confBool = input("Would you like to remove? (t/n): ")
                 
-            delete_session(rtr, session)
-            confBool = "n"
-        else:
+            if confBool == "t":
+                try:
+                    removeAdmin(rtr, user, device, session)
+                    df['STATUS'] = 'SUCCESS'
+                except:
+                    print("ERROR!")
+                    df['STATUS']= 'ERROR'
+                
+                delete_session(rtr, session)
+                if autocycle == "t":
+                    confBool = "t"
+                else:
+                    confBool = "n"
+            else:
+                print("Error not confirmed")
+        elif takeAct == "PASS":
+            print(f"Passing on User: {user} Device: {device}")
             return
-        bool = input("Would you like to continue? (t/n): ")
-        if bool == "t":
-            print("Continuing...")
         else:
-            df.to_csv("./result.csv")
-            return
+            print(f"Passing on User: {user} Device: {device} due to empty ACTION field! Please fill in csv with either REMOVE or PASS.")
+        
+        if autocycle == "t":
+            contBool = "t"
+            if contBool == "t":
+                print("Continuing...")
+            else:
+                return
         i =+ i
+    print("Program Complete... Outputting Results!")
+    df.to_csv("./result.csv")
 if __name__ == "__main__":
     main()
