@@ -1,4 +1,2 @@
 *.csv
 *.venv
-localAdminCSKiller/dist
-localAdminCSKiller/build
