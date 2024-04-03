@@ -124,7 +124,7 @@ def main():
             if autocycle == "t":
                 print(f"Auto-processing Account #{i}")
             else:
-                confBool = input("Would you like to remove? (t/n): ")
+                confBool = input(f"Would you like to remove {user} from LocalAdmin on {device}? (t/n): ")
                 
             if confBool == "t":
                 try:
@@ -140,19 +140,13 @@ def main():
                 else:
                     confBool = "n"
             else:
-                print("Error not confirmed")
+                print("Error not confirmed. Exiting Program")
         elif takeAct == "PASS":
             print(f"Passing on User: {user} Device: {device}")
             return
         else:
             print(f"Passing on User: {user} Device: {device} due to empty ACTION field! Please fill in csv with either REMOVE or PASS.")
-        
-        if autocycle == "t":
-            contBool = "t"
-            if contBool == "t":
-                print("Continuing...")
-            else:
-                return
+            print("Continuing...")
         i =+ i
     print("Program Complete... Outputting Results!")
     df.to_csv("./result.csv")
