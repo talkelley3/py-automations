@@ -46,13 +46,10 @@ def loadAid(host, lDevice):
         )
     if result["status_code"] == 200:
         if len(result["body"]["resources"]) == 0:                   
-            raise SystemExit(
-                    "%80s" % f"{' ' * 80}\nUnable to retrieve "
-                    "AID for target.\n"                 
-                    "Check target hostname value."
-                )
-        returned = result["body"]["resources"][0]
-        print(f"AID Retrival Succesful: {returned}")
+            print("ERROR getting aid skipping!")
+        else:
+            returned = result["body"]["resources"][0]
+            print(f"AID Retrival Succesful: {returned}")
     else:
         returned = False
 
@@ -64,14 +61,15 @@ def initSession(lRtr, lDevice, lDeviceID):
         if session_init["status_code"] != 201:
             # RTR session connection failure.
             print(f"Unable to open RTR session with {lDevice} [{lDeviceID}]")
+            return False
         else:
             session_id = session_init["body"]["resources"][0]["session_id"]
             print("Connection Successful!")
+            return session_id
     except Exception as e:
         print("Error Connecting to Device!")
         print(e)
         return False
-    return session_id
 def delete_session(lRtr, lSession):
     """
     Deletes the RTR session as specified by session ID
@@ -119,8 +117,17 @@ def main():
         takeAct = re.findall("REMOVE|PASS", takeAct)
         takeAct = takeAct[0]
         if takeAct == "REMOVE":
-            aid = loadAid(host, device)
-            session = initSession(rtr, device, aid)
+            try:
+                aid = loadAid(host, device)
+            except Exception as e:
+                print("ERROR loading AID!")
+                df['STATUS']= 'ERROR1'
+            try:
+                session = initSession(rtr, device, aid)
+            except Exception as e:
+                print("ERROR init session!")
+                df['STATUS']= 'ERROR2'
+                
             if autocycle == "t":
                 print(f"Auto-processing Account #{i}")
             else:
